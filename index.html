@@ -1,0 +1,1168 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Family Bonds: AR Hand-Tracking English Game with Gemini AI</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@300;400;600;700&family=Fredoka:wght@400;600;700&display=swap" rel="stylesheet">
+    <!-- FontAwesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- MediaPipe Hands & Camera Utils -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+    <!-- Canvas Confetti -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+
+    <style>
+        body {
+            font-family: 'Fredoka', 'Chakra Petch', sans-serif;
+            overflow: hidden;
+            background: #0f172a;
+        }
+        /* Neon effects */
+        .neon-glow-cyan {
+            box-shadow: 0 0 15px rgba(6, 182, 212, 0.5);
+            text-shadow: 0 0 8px rgba(6, 182, 212, 0.5);
+        }
+        .neon-glow-purple {
+            box-shadow: 0 0 20px rgba(168, 85, 247, 0.4);
+        }
+        .neon-glow-amber {
+            box-shadow: 0 0 15px rgba(245, 158, 11, 0.5);
+            text-shadow: 0 0 8px rgba(245, 158, 11, 0.5);
+        }
+        .neon-border-green {
+            box-shadow: 0 0 15px rgba(34, 197, 94, 0.6);
+            border-color: rgb(34, 197, 94);
+        }
+        .neon-border-red {
+            box-shadow: 0 0 15px rgba(239, 68, 68, 0.6);
+            border-color: rgb(239, 68, 68);
+        }
+        /* Mirroring Web Camera */
+        #webcam {
+            transform: scaleX(-1);
+        }
+        #hand-canvas {
+            transform: scaleX(-1);
+        }
+        /* Custom Loading Ring animation */
+        @keyframes rotate {
+            100% { transform: rotate(360deg); }
+        }
+        .loading-ring {
+            animation: rotate 1s linear infinite;
+        }
+    </style>
+</head>
+<body class="relative min-h-screen text-slate-100 flex flex-col items-center justify-center p-4">
+
+    <!-- AR Background (Webcam Stream and Hand Detection Layer) -->
+    <div class="absolute inset-0 w-full h-full z-0 overflow-hidden bg-slate-950">
+        <!-- Overlay Darkener/Blender for UI readability -->
+        <div class="absolute inset-0 bg-gradient-to-tr from-slate-950/90 via-slate-900/50 to-slate-950/80 z-10"></div>
+        
+        <video id="webcam" class="absolute inset-0 w-full h-full object-cover opacity-35" autoplay playsinline></video>
+        <canvas id="hand-canvas" class="absolute inset-0 w-full h-full object-cover z-0 pointer-events-none"></canvas>
+    </div>
+
+    <!-- Hand Pointer UI (Custom Tracking Circle) -->
+    <div id="hand-pointer" class="absolute w-8 h-8 rounded-full border-4 border-cyan-400 bg-cyan-200/40 pointer-events-none z-50 hidden mix-blend-screen transition-all duration-75">
+        <!-- Progress Circular Bar around pointer -->
+        <svg class="absolute -top-3 -left-3 w-12 h-12" viewBox="0 0 36 36">
+            <path class="text-transparent" stroke-width="3" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+            <path id="pointer-progress" class="text-cyan-400 transition-all duration-100" stroke-dasharray="0, 100" stroke-width="3" stroke-linecap="round" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+        </svg>
+        <div class="absolute inset-0 m-auto w-2.5 h-2.5 bg-white rounded-full"></div>
+    </div>
+
+    <!-- MAIN INTERACTIVE CONTAINER (Z-20) -->
+    <main class="relative z-20 w-full max-w-4xl mx-auto flex flex-col justify-between min-h-[90vh] p-2 md:p-4">
+        
+        <!-- Header: Logo, Controls, and Tracking Status -->
+        <header class="w-full flex flex-col md:flex-row justify-between items-center gap-4 bg-slate-900/85 backdrop-blur-md p-4 rounded-2xl border border-slate-700/50 shadow-xl">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-500 via-blue-500 to-fuchsia-600 flex items-center justify-center text-white text-xl shadow-lg">
+                    <i class="fa-solid fa-people-roof"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl md:text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 to-fuchsia-400">Family Relationship AI</h1>
+                    <p class="text-xs text-slate-400">English AR Game Powered by Gemini ✨</p>
+                </div>
+            </div>
+            
+            <!-- Connection & Tracker Status -->
+            <div class="flex flex-wrap items-center justify-center gap-4">
+                <div class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-800 border border-slate-700 text-xs">
+                    <span id="control-mode-badge" class="font-bold text-cyan-400"><i class="fa-solid fa-hand-pointer mr-1"></i> Mode: Hand AR</span>
+                    <button id="toggle-control-btn" class="ml-2 text-fuchsia-400 hover:text-fuchsia-300 transition underline font-semibold">Switch to Mouse</button>
+                </div>
+                
+                <div class="flex items-center gap-2">
+                    <span id="tracker-status-dot" class="w-3.5 h-3.5 rounded-full bg-yellow-500 animate-pulse"></span>
+                    <span id="tracker-status-text" class="text-xs text-slate-300 font-medium">กำลังเตรียมระบบ...</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- GAME SCREEN CONTAINER -->
+        <div class="w-full my-4 flex-grow flex flex-col justify-center items-center">
+            
+            <!-- 1. START SCREEN -->
+            <div id="screen-start" class="w-full max-w-2xl bg-slate-900/85 backdrop-blur-lg p-6 md:p-8 rounded-3xl border border-slate-700/60 shadow-2xl flex flex-col items-center text-center">
+                <div class="relative w-20 h-20 mb-4 flex items-center justify-center bg-gradient-to-tr from-cyan-500 to-fuchsia-500 rounded-3xl shadow-xl animate-bounce">
+                    <i class="fa-solid fa-hand-holding-heart text-4xl text-white"></i>
+                </div>
+                
+                <h2 class="text-2xl md:text-3xl font-extrabold text-white mb-1">AR Family Quest!</h2>
+                <p class="text-slate-300 text-sm max-w-md mb-6 leading-relaxed">
+                    เรียนรู้ความสัมพันธ์ของสมาชิกในครอบครัวด้วยระบบตรวจจับการชี้มือ AR และระบบช่วยสอนสุดอัจฉริยะด้วยขุมพลังของปัญญาประดิษฐ์ ✨
+                </p>
+
+                <!-- Gemini Custom Generation Section -->
+                <div class="w-full bg-slate-950/60 border border-cyan-500/30 rounded-2xl p-4 mb-6 text-left">
+                    <div class="flex items-center gap-2 mb-2 text-cyan-400 font-bold text-sm">
+                        <i class="fa-solid fa-wand-magic-sparkles text-fuchsia-400"></i>
+                        <span>✨ โหมดสร้างชุดคำถามด้วย AI ตามหัวข้อที่คุณชอบ</span>
+                    </div>
+                    <p class="text-xs text-slate-400 mb-3">คุณสามารถพิมพ์ความสนใจหรือหัวข้อเฉพาะ เช่น "ราชวงศ์อังกฤษ", "ประวัติศาสตร์จีน", "เทพเจ้ากรีก" เพื่อสร้างควิซอัจฉริยะขึ้นใหม่ทันทีได้เลย!</p>
+                    <div class="flex flex-col sm:flex-row gap-2">
+                        <input id="ai-theme-input" type="text" placeholder="พิมพ์ธีมของคุณ เช่น Greek Gods, Game of Thrones, Royal Family..." class="flex-grow bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-cyan-400 transition" />
+                        <button id="btn-start-ai" class="bg-gradient-to-r from-fuchsia-600 to-pink-600 hover:from-fuchsia-500 hover:to-pink-500 text-white text-sm font-semibold rounded-xl px-5 py-2.5 shadow-lg shadow-fuchsia-500/20 transform hover:-translate-y-0.5 transition duration-150 flex items-center justify-center gap-1.5 shrink-0">
+                            <i class="fa-solid fa-microchip"></i> ✨ สร้างควิซ AI
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Steps Info Grid -->
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 w-full mb-6 text-left text-xs">
+                    <div class="p-3 rounded-xl bg-slate-800/60 border border-slate-700/40">
+                        <div class="text-cyan-400 font-bold mb-0.5"><i class="fa-solid fa-camera mr-1"></i>1. เปิดกล้องเว็บแคม</div>
+                        <p class="text-slate-400">เปิดระบบกล้องเพื่อติดตามความเคลื่อนไหวของนิ้วชี้อย่างแม่นยำ</p>
+                    </div>
+                    <div class="p-3 rounded-xl bg-slate-800/60 border border-slate-700/40">
+                        <div class="text-fuchsia-400 font-bold mb-0.5"><i class="fa-solid fa-hand mr-1"></i>2. ยกมือขึ้นจอ</div>
+                        <p class="text-slate-400">ระบบจะจำลองจุดเล็งเคอร์เซอร์นีออนลอยตามปลายนิ้วคุณ</p>
+                    </div>
+                    <div class="p-3 rounded-xl bg-slate-800/60 border border-slate-700/40">
+                        <div class="text-emerald-400 font-bold mb-0.5"><i class="fa-solid fa-clock mr-1"></i>3. ชี้ค้างเพื่อกด</div>
+                        <p class="text-slate-400">เพียงชี้ค้างบนปุ่มตัวเลือก 1.5 วินาทีแทนการกดเมาส์แบบเดิม</p>
+                    </div>
+                </div>
+
+                <div class="flex flex-col sm:flex-row gap-3 w-full">
+                    <button id="btn-start-ar" class="flex-1 py-3.5 px-5 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-bold rounded-xl shadow-lg shadow-cyan-500/20 hover:shadow-cyan-400/30 transform hover:-translate-y-0.5 transition duration-200 text-base flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-video"></i> เล่นแบบจับมือ (AR Mode)
+                    </button>
+                    <button id="btn-start-mouse" class="flex-1 py-3.5 px-5 bg-slate-800 hover:bg-slate-700 border border-slate-600 hover:border-slate-500 text-white font-bold rounded-xl transition duration-200 text-base flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-mouse"></i> เล่นโหมดธรรมดา (Mouse Mode)
+                    </button>
+                </div>
+            </div>
+
+            <!-- 2. CAMERA & AI INITIALIZING SCREEN -->
+            <div id="screen-loading" class="hidden w-full max-w-md bg-slate-900/90 backdrop-blur-lg p-8 rounded-3xl border border-slate-700/60 shadow-2xl flex flex-col items-center text-center">
+                <div class="w-16 h-16 rounded-full border-4 border-t-cyan-400 border-r-fuchsia-500 border-b-slate-700 border-l-slate-700 animate-spin mb-6"></div>
+                <h3 id="loading-title" class="text-2xl font-bold text-white mb-2">กำลังเตรียมระบบควิซของคุณ</h3>
+                <p id="loading-description" class="text-slate-400 text-sm mb-5">โปรดอนุญาตใช้งานเว็บแคม และรอระบบอัจฉริยะโหลดโมเดลเพื่อประมวลผลตำแหน่งมือของท่านอย่างถูกต้อง...</p>
+                <div class="w-full bg-slate-800 rounded-full h-2">
+                    <div id="ar-progress-bar" class="bg-gradient-to-r from-cyan-400 to-fuchsia-500 h-2 rounded-full transition-all duration-300" style="width: 10%"></div>
+                </div>
+                <span id="ar-progress-text" class="text-xs text-slate-500 mt-2">กำลังโหลดโมเดล AI... (10%)</span>
+            </div>
+
+            <!-- 3. PLAYING SCREEN -->
+            <div id="screen-game" class="hidden w-full flex flex-col gap-4 max-w-4xl">
+                
+                <!-- Scoreboard and Progress info -->
+                <div class="w-full flex justify-between items-center bg-slate-900/85 backdrop-blur-md px-4 py-3 rounded-2xl border border-slate-800 shadow-lg">
+                    <div class="flex items-center gap-3">
+                        <div class="bg-cyan-500/10 text-cyan-400 font-bold px-3 py-1.5 rounded-xl border border-cyan-500/20 text-sm">
+                            Question <span id="current-question-num" class="text-base">1</span>/5
+                        </div>
+                        <div class="w-24 md:w-40 bg-slate-800 rounded-full h-2.5 overflow-hidden">
+                            <div id="question-progress-bar" class="bg-gradient-to-r from-cyan-400 to-fuchsia-500 h-full transition-all duration-300" style="width: 20%"></div>
+                        </div>
+                    </div>
+
+                    <!-- AI Hint Indicator & Score panel -->
+                    <div class="flex items-center gap-4">
+                        <!-- Gemini Hint Button (Hoverable with pointer) -->
+                        <button id="btn-ai-hint" class="group relative overflow-hidden bg-slate-800/80 hover:bg-amber-500/20 text-slate-300 hover:text-amber-300 border border-slate-700 hover:border-amber-500/50 rounded-xl px-3 py-1.5 text-xs font-bold transition duration-200 flex items-center gap-1">
+                            <i class="fa-solid fa-lightbulb text-amber-400"></i>
+                            <span>✨ AI Hint</span>
+                        </button>
+
+                        <div class="text-right">
+                            <p class="text-[10px] text-slate-400">YOUR SCORE</p>
+                            <p class="text-xl font-black text-emerald-400 tracking-wide" id="live-score">000</p>
+                        </div>
+                        
+                        <div class="flex items-center gap-1 text-rose-500 text-lg" id="timer-indicator">
+                            <i class="fa-solid fa-hourglass-start animate-pulse"></i>
+                            <span id="timer-sec" class="font-bold font-mono">30</span>s
+                        </div>
+                    </div>
+                </div>
+
+                <!-- AI HINT MODAL POPUP (Shows when requested/hovered) -->
+                <div id="ai-hint-bubble" class="hidden w-full bg-amber-500/10 border-2 border-amber-500/30 rounded-2xl p-4 text-left transition-all duration-300 relative">
+                    <div class="absolute -top-3 left-6 bg-slate-900 border border-amber-500/40 text-amber-400 px-3 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1">
+                        <i class="fa-solid fa-bolt"></i> ✨ Gemini AI Assistant
+                    </div>
+                    <button id="btn-close-hint" class="absolute top-2.5 right-2.5 text-slate-400 hover:text-slate-100"><i class="fa-solid fa-xmark"></i></button>
+                    <p id="ai-hint-text" class="text-xs md:text-sm text-slate-200 leading-relaxed mt-1 italic">"กำลังเรียกความคิดสร้างสรรค์จาก AI..."</p>
+                </div>
+
+                <!-- QUESTION AREA -->
+                <div class="w-full bg-slate-900/80 backdrop-blur-md p-6 md:p-8 rounded-3xl border border-slate-700/50 shadow-2xl relative overflow-hidden flex flex-col items-center">
+                    <!-- Subtle background visual effects -->
+                    <div class="absolute -top-10 -left-10 w-40 h-40 bg-cyan-500/10 rounded-full blur-2xl"></div>
+                    <div class="absolute -bottom-10 -right-10 w-40 h-40 bg-fuchsia-500/10 rounded-full blur-2xl"></div>
+
+                    <span id="question-badge" class="text-[10px] font-bold text-fuchsia-400 tracking-wider uppercase mb-2 px-3 py-1 rounded-full bg-fuchsia-500/10 border border-fuchsia-500/20">Translate this Family bond!</span>
+                    <h2 id="question-text" class="text-lg md:text-2xl font-extrabold text-white text-center leading-relaxed">
+                        My mother's sister is my...?
+                    </h2>
+                </div>
+
+                <!-- ANSWER BUTTONS GRID (Hoverable boxes) -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3 w-full">
+                    <!-- Option A -->
+                    <button data-index="0" class="ans-btn group relative overflow-hidden bg-slate-900/85 backdrop-blur-md hover:bg-slate-800/90 text-left p-4 md:p-5 rounded-2xl border border-slate-700/50 hover:border-cyan-500/80 transition-all duration-150 flex items-center gap-4">
+                        <div class="ans-circle flex-shrink-0 w-9 h-9 rounded-xl bg-slate-800 border border-slate-700 text-slate-300 font-bold text-base flex items-center justify-center group-hover:bg-cyan-500 group-hover:text-white transition-colors duration-200">A</div>
+                        <div class="flex-grow">
+                            <p class="text-[10px] text-slate-400">Option</p>
+                            <p class="ans-val text-base md:text-lg font-bold text-white">Aunt</p>
+                        </div>
+                        <div class="ans-checkmark opacity-0 text-emerald-400 text-2xl absolute right-5"><i class="fa-regular fa-circle-check"></i></div>
+                    </button>
+                    <!-- Option B -->
+                    <button data-index="1" class="ans-btn group relative overflow-hidden bg-slate-900/85 backdrop-blur-md hover:bg-slate-800/90 text-left p-4 md:p-5 rounded-2xl border border-slate-700/50 hover:border-cyan-500/80 transition-all duration-150 flex items-center gap-4">
+                        <div class="ans-circle flex-shrink-0 w-9 h-9 rounded-xl bg-slate-800 border border-slate-700 text-slate-300 font-bold text-base flex items-center justify-center group-hover:bg-cyan-500 group-hover:text-white transition-colors duration-200">B</div>
+                        <div class="flex-grow">
+                            <p class="text-[10px] text-slate-400">Option</p>
+                            <p class="ans-val text-base md:text-lg font-bold text-white">Uncle</p>
+                        </div>
+                        <div class="ans-checkmark opacity-0 text-emerald-400 text-2xl absolute right-5"><i class="fa-regular fa-circle-check"></i></div>
+                    </button>
+                    <!-- Option C -->
+                    <button data-index="2" class="ans-btn group relative overflow-hidden bg-slate-900/85 backdrop-blur-md hover:bg-slate-800/90 text-left p-4 md:p-5 rounded-2xl border border-slate-700/50 hover:border-cyan-500/80 transition-all duration-150 flex items-center gap-4">
+                        <div class="ans-circle flex-shrink-0 w-9 h-9 rounded-xl bg-slate-800 border border-slate-700 text-slate-300 font-bold text-base flex items-center justify-center group-hover:bg-cyan-500 group-hover:text-white transition-colors duration-200">C</div>
+                        <div class="flex-grow">
+                            <p class="text-[10px] text-slate-400">Option</p>
+                            <p class="ans-val text-base md:text-lg font-bold text-white">Cousin</p>
+                        </div>
+                        <div class="ans-checkmark opacity-0 text-emerald-400 text-2xl absolute right-5"><i class="fa-regular fa-circle-check"></i></div>
+                    </button>
+                    <!-- Option D -->
+                    <button data-index="3" class="ans-btn group relative overflow-hidden bg-slate-900/85 backdrop-blur-md hover:bg-slate-800/90 text-left p-4 md:p-5 rounded-2xl border border-slate-700/50 hover:border-cyan-500/80 transition-all duration-150 flex items-center gap-4">
+                        <div class="ans-circle flex-shrink-0 w-9 h-9 rounded-xl bg-slate-800 border border-slate-700 text-slate-300 font-bold text-base flex items-center justify-center group-hover:bg-cyan-500 group-hover:text-white transition-colors duration-200">D</div>
+                        <div class="flex-grow">
+                            <p class="text-[10px] text-slate-400">Option</p>
+                            <p class="ans-val text-base md:text-lg font-bold text-white">Niece</p>
+                        </div>
+                        <div class="ans-checkmark opacity-0 text-emerald-400 text-2xl absolute right-5"><i class="fa-regular fa-circle-check"></i></div>
+                    </button>
+                </div>
+            </div>
+
+            <!-- 4. RESULTS SCREEN -->
+            <div id="screen-result" class="hidden w-full max-w-xl bg-slate-900/90 backdrop-blur-lg p-6 md:p-8 rounded-3xl border border-slate-700/60 shadow-2xl flex flex-col items-center text-center">
+                <!-- Trophy / Achievement Icon -->
+                <div class="relative w-24 h-24 mb-5 flex items-center justify-center bg-gradient-to-tr from-yellow-400 via-amber-500 to-orange-500 rounded-full shadow-2xl border-4 border-slate-900">
+                    <i class="fa-solid fa-trophy text-white text-4xl animate-pulse"></i>
+                </div>
+
+                <h2 class="text-2xl md:text-3xl font-black text-white mb-1">ยินดีด้วยกับการแข่งขันท้าทาย!</h2>
+                <p class="text-slate-400 text-xs mb-5">คุณได้ทำการทดสอบศัพท์คำถามความสัมพันธ์ครอบครัวจบแล้ว</p>
+
+                <!-- Score Board Details -->
+                <div class="w-full bg-slate-800/80 border border-slate-700 rounded-2xl p-4 mb-5 flex flex-col gap-3">
+                    <div class="flex justify-between items-center text-sm">
+                        <span class="text-slate-400">ตอบถูกทั้งหมด:</span>
+                        <span id="result-correct-count" class="text-lg font-bold text-emerald-400">0/5 ข้อ</span>
+                    </div>
+                    <div class="h-px bg-slate-700"></div>
+                    <div class="flex justify-between items-center text-sm">
+                        <span class="text-slate-400">คะแนนรวมสะสม:</span>
+                        <span id="result-final-score" class="text-2xl font-black text-cyan-400">000</span>
+                    </div>
+                    <div class="h-px bg-slate-700"></div>
+                    <div class="flex justify-between items-center text-sm">
+                        <span class="text-slate-400">ระดับสมรรถนะ:</span>
+                        <span id="result-rank" class="text-base font-bold text-fuchsia-400">Family Expert! 🌟</span>
+                    </div>
+                </div>
+
+                <!-- Review feedback paragraph -->
+                <p id="result-feedback" class="text-slate-300 text-xs italic mb-6 px-4">
+                    "สุดยอดการชี้และสายสัมพันธ์ที่ยอดเยี่ยม! คล่องแคล่วและแม่นยำดั่งมือโปร!"
+                </p>
+
+                <!-- Buttons inside result screen -->
+                <div class="flex flex-col sm:flex-row gap-3 w-full">
+                    <button id="btn-replay" class="flex-grow py-3 px-5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white font-bold rounded-xl shadow-lg transform hover:-translate-y-0.5 transition duration-200 text-base flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-rotate-left"></i> เล่นอีกรอบ
+                    </button>
+                    <button id="btn-share" class="py-3 px-5 bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-200 font-bold rounded-xl transition duration-200 flex items-center justify-center gap-2 text-sm">
+                        <i class="fa-solid fa-copy"></i> คัดลอกลิ้งค์
+                    </button>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Custom Notification toast -->
+        <div id="toast-message" class="fixed bottom-6 left-1/2 transform -translate-x-1/2 bg-slate-900/90 border-2 border-rose-500/60 text-slate-100 px-5 py-3 rounded-2xl shadow-2xl backdrop-blur-md text-sm hidden flex items-center gap-2 z-50">
+            <i class="fa-solid fa-circle-exclamation text-rose-400 text-lg"></i>
+            <span id="toast-text">เกิดข้อผิดพลาดในการเชื่อมต่อกรุณาลองใหม่อีกครั้ง</span>
+        </div>
+
+        <!-- Footer Help -->
+        <footer class="w-full text-center text-[10px] text-slate-500 mt-2">
+            <p>หมายเหตุ: เพื่อประสบการณ์จับคู่ AR ที่ดีที่สุด แนะนำให้จัดแสงสว่างให้พอกล้องมองเห็นมือ และวางมือห่างจากกล้องประมาณ 0.5 - 1.5 เมตร</p>
+        </footer>
+    </main>
+
+    <!-- JS Logic -->
+    <script>
+        // --- DATA: 50 Family Relationship Questions ---
+        const questionBank = [
+            { q: "My mother's sister is my...?", a: ["Aunt", "Uncle", "Cousin", "Niece"], c: 0 },
+            { q: "My father's brother is my...?", a: ["Nephew", "Uncle", "Aunt", "Brother-in-law"], c: 1 },
+            { q: "The son of my aunt is my...?", a: ["Nephew", "Cousin", "Brother", "Grandson"], c: 1 },
+            { q: "The daughter of my brother is my...?", a: ["Niece", "Nephew", "Sister-in-law", "Cousin"], c: 0 },
+            { q: "The son of my sister is my...?", a: ["Niece", "Grandson", "Nephew", "Uncle"], c: 2 },
+            { q: "My grandmother's husband is my...?", a: ["Father-in-law", "Great-uncle", "Grandfather", "Brother"], c: 2 },
+            { q: "The female child of my parents is my...?", a: ["Daughter", "Sister", "Aunt", "Mother"], c: 1 },
+            { q: "The male child of my parents is my...?", a: ["Brother", "Uncle", "Son", "Father"], c: 0 },
+            { q: "My father's mother is my...?", a: ["Great-grandmother", "Mother-in-law", "Aunt", "Grandmother"], c: 3 },
+            { q: "My mother's father is my...?", a: ["Grandfather", "Grandson", "Step-father", "Uncle"], c: 0 },
+            { q: "The woman who married my father but is not my biological mother is my...?", a: ["Step-mother", "Godmother", "Mother-in-law", "Aunt-in-law"], c: 0 },
+            { q: "The man who married my mother but is not my biological father is my...?", a: ["Uncle", "Step-father", "Father-in-law", "Godfather"], c: 1 },
+            { q: "The sister of my husband/wife is my...?", a: ["Sister-in-law", "Step-sister", "Niece", "Cousin"], c: 0 },
+            { q: "The brother of my husband/wife is my...?", a: ["Brother-in-law", "Cousin", "Step-brother", "Nephew"], c: 0 },
+            { q: "My husband's/wife's mother is my...?", a: ["Grandmother", "Aunt", "Mother-in-law", "Step-mother"], c: 2 },
+            { q: "My husband's/wife's father is my...?", a: ["Father-in-law", "Grandfather", "Uncle", "Step-father"], c: 0 },
+            { q: "The daughter of my daughter is my...?", a: ["Grandson", "Granddaughter", "Great-granddaughter", "Niece"], c: 1 },
+            { q: "The son of my son is my...?", a: ["Grandson", "Granddaughter", "Great-grandson", "Nephew"], c: 0 },
+            { q: "A child who has no brothers or sisters is an...?", a: ["Adopted child", "Stepchild", "Only child", "Orphan"], c: 2 },
+            { q: "My mother's mother's mother is my...?", a: ["Grandmother", "Great-grandmother", "Great-great-grandmother", "Aunt"], c: 1 },
+            { q: "A boy child who was legally taken into another family is their...?", a: ["Adopted son", "Step-son", "Nephew", "Godson"], c: 0 },
+            { q: "My parent's male sibling is my...?", a: ["Aunt", "Uncle", "Brother", "Cousin"], c: 1 },
+            { q: "My parent's female sibling is my...?", a: ["Cousin", "Sister", "Aunt", "Niece"], c: 2 },
+            { q: "My child's male spouse is my...?", a: ["Son-in-law", "Brother-in-law", "Nephew", "Step-son"], c: 0 },
+            { q: "My child's female spouse is my...?", a: ["Daughter-in-law", "Sister-in-law", "Niece", "Step-daughter"], c: 0 },
+            { q: "My father's sister's daughter is my...?", a: ["Cousin", "Niece", "Sister", "Aunt"], c: 0 },
+            { q: "My sister's husband is my...?", a: ["Brother-in-law", "Brother", "Cousin", "Father-in-law"], c: 0 },
+            { q: "My brother's wife is my...?", a: ["Sister-in-law", "Sister", "Cousin", "Mother-in-law"], c: 0 },
+            { q: "Your male parent is your...?", a: ["Father", "Uncle", "Brother", "Grandfather"], c: 0 },
+            { q: "Your female parent is your...?", a: ["Aunt", "Mother", "Sister", "Grandmother"], c: 1 },
+            { q: "Your grandfather's daughter, who is also your mother's sister, is your...?", a: ["Aunt", "Cousin", "Niece", "Grandmother"], c: 0 },
+            { q: "Your grandfather's son, who is also your father's brother, is your...?", a: ["Uncle", "Cousin", "Nephew", "Grandfather"], c: 0 },
+            { q: "A child with the same parents as you is your...?", a: ["Sibling", "Cousin", "Step-child", "Spouse"], c: 0 },
+            { q: "Your male child is your...?", a: ["Nephew", "Son", "Brother", "Grandson"], c: 1 },
+            { q: "Your female child is your...?", a: ["Niece", "Daughter", "Sister", "Granddaughter"], c: 1 },
+            { q: "The woman you are married to is your...?", a: ["Wife", "Husband", "Fiancee", "Spouse"], c: 0 },
+            { q: "The man you are married to is your...?", a: ["Husband", "Wife", "Fiance", "Partner"], c: 0 },
+            { q: "My mother's new husband's son (not from my biological mother/father) is my...?", a: ["Step-brother", "Half-brother", "Brother-in-law", "Cousin"], c: 0 },
+            { q: "My mother's new husband's daughter (not from my biological mother/father) is my...?", a: ["Step-sister", "Half-sister", "Sister-in-law", "Cousin"], c: 0 },
+            { q: "A brother who shares only one parent with you is your...?", a: ["Half-brother", "Step-brother", "Brother-in-law", "Cousin"], c: 0 },
+            { q: "A sister who shares only one parent with you is your...?", a: ["Half-sister", "Step-sister", "Sister-in-law", "Cousin"], c: 0 },
+            { q: "The sister of my mother is my...?", a: ["Aunt", "Cousin", "Niece", "Sister-in-law"], c: 0 },
+            { q: "The father of my grandmother is my...?", a: ["Great-grandfather", "Grandfather", "Great-uncle", "Step-grandfather"], c: 0 },
+            { q: "The mother of my grandfather is my...?", a: ["Great-grandmother", "Grandmother", "Great-aunt", "Step-grandmother"], c: 0 },
+            { q: "A baby in your family is also called an...?", a: ["Infant / Baby", "Adult", "Teenager", "Elder"], c: 0 },
+            { q: "Your children's children are your...?", a: ["Grandchildren", "Nieces/Nephews", "Cousins", "Siblings"], c: 0 },
+            { q: "The male sibling of my grandfather is my...?", a: ["Great-uncle", "Uncle", "Grandfather", "Brother-in-law"], c: 0 },
+            { q: "The female sibling of my grandmother is my...?", a: ["Great-aunt", "Aunt", "Grandmother", "Sister-in-law"], c: 0 },
+            { q: "The children of your aunt or uncle are your...?", a: ["Cousins", "Siblings", "Nephews", "Nieces"], c: 0 },
+            { q: "Your husband's brother's daughter is your...?", a: ["Niece", "Step-daughter", "Cousin", "Sister-in-law"], c: 0 }
+        ];
+
+        // --- Sound Generator (Web Audio API Synthesizer) ---
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        
+        function playSynthSound(type) {
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+
+            const now = audioCtx.currentTime;
+
+            if (type === 'correct') {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(523.25, now); // C5
+                osc.frequency.setValueAtTime(659.25, now + 0.1); // E5
+                osc.frequency.setValueAtTime(783.99, now + 0.2); // G5
+                osc.frequency.setValueAtTime(1046.50, now + 0.3); // C6
+                gain.gain.setValueAtTime(0.3, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.5);
+                osc.start(now);
+                osc.stop(now + 0.5);
+            } else if (type === 'wrong') {
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(150, now);
+                osc.frequency.linearRampToValueAtTime(80, now + 0.4);
+                gain.gain.setValueAtTime(0.3, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.4);
+                osc.start(now);
+                osc.stop(now + 0.4);
+            } else if (type === 'hover') {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(600, now);
+                gain.gain.setValueAtTime(0.1, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.08);
+                osc.start(now);
+                osc.stop(now + 0.08);
+            } else if (type === 'click') {
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(800, now);
+                gain.gain.setValueAtTime(0.2, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.12);
+                osc.start(now);
+                osc.stop(now + 0.12);
+            } else if (type === 'tick') {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(1000, now);
+                gain.gain.setValueAtTime(0.08, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+                osc.start(now);
+                osc.stop(now + 0.05);
+            } else if (type === 'victory') {
+                const notes = [523.25, 587.33, 659.25, 698.46, 783.99, 880.00, 987.77, 1046.50];
+                notes.forEach((freq, idx) => {
+                    const oscNote = audioCtx.createOscillator();
+                    const gainNote = audioCtx.createGain();
+                    oscNote.connect(gainNote);
+                    gainNote.connect(audioCtx.destination);
+                    oscNote.type = 'triangle';
+                    oscNote.frequency.setValueAtTime(freq, now + idx * 0.1);
+                    gainNote.gain.setValueAtTime(0.15, now + idx * 0.1);
+                    gainNote.gain.exponentialRampToValueAtTime(0.01, now + idx * 0.1 + 0.2);
+                    oscNote.start(now + idx * 0.1);
+                    oscNote.stop(now + idx * 0.1 + 0.25);
+                });
+            }
+        }
+
+        // --- GEMINI API CONNECTOR WITH RETRY & EXPONENTIAL BACKOFF ---
+        const apiKey = ""; // Set dynamically by platform runtime
+        
+        async function fetchGeminiAPI(payload, endpoint = "generateContent") {
+            const baseUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:${endpoint}?key=${apiKey}`;
+            const maxRetries = 5;
+            let attempt = 0;
+            
+            while (attempt < maxRetries) {
+                try {
+                    const response = await fetch(baseUrl, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (response.ok) {
+                        return await response.json();
+                    }
+                } catch (e) {
+                    // Fail silently for exponential retries
+                }
+                
+                attempt++;
+                if (attempt < maxRetries) {
+                    const delay = Math.pow(2, attempt) * 1000; // 2s, 4s, 8s, 16s...
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                }
+            }
+            throw new Error("Failed to communicate with Gemini AI after 5 attempts.");
+        }
+
+        // Display user-friendly error toast
+        function showNotification(text) {
+            const toast = document.getElementById('toast-message');
+            const toastText = document.getElementById('toast-text');
+            toastText.textContent = text;
+            toast.classList.remove('hidden');
+            setTimeout(() => {
+                toast.classList.add('hidden');
+            }, 4500);
+        }
+
+        // --- APP STATE ---
+        let controlMode = 'ar'; // 'ar' or 'mouse'
+        let currentScreen = 'start'; // 'start', 'loading', 'playing', 'result'
+        let activeQuestions = [];
+        let currentQuestionIndex = 0;
+        let score = 0;
+        let correctAnswersCount = 0;
+        let timer = 30;
+        let timerInterval = null;
+        let hasAnswered = false;
+        let isAIGeneratedMode = false;
+        let currentAITopic = "";
+
+        // AR Hand Detection variables
+        let videoElement = document.getElementById('webcam');
+        let canvasElement = document.getElementById('hand-canvas');
+        let canvasCtx = canvasElement.getContext('2d');
+        let handPointer = document.getElementById('hand-pointer');
+        let pointerProgressPath = document.getElementById('pointer-progress');
+        
+        let hands = null;
+        let camera = null;
+        let isModelLoaded = false;
+        
+        // Cursor position smoothing
+        let cursorX = 0;
+        let cursorY = 0;
+        const smoothingFactor = 0.25;
+
+        // Hover tracking state
+        let hoveredElement = null;
+        let hoverStartTime = null;
+        const requiredHoverTime = 1500; // 1.5 seconds
+
+        // --- DOM Elements ---
+        const screens = {
+            start: document.getElementById('screen-start'),
+            loading: document.getElementById('screen-loading'),
+            game: document.getElementById('screen-game'),
+            result: document.getElementById('screen-result')
+        };
+        const trackerStatusDot = document.getElementById('tracker-status-dot');
+        const trackerStatusText = document.getElementById('tracker-status-text');
+        const controlModeBadge = document.getElementById('control-mode-badge');
+        const toggleControlBtn = document.getElementById('toggle-control-btn');
+
+        // Start Buttons
+        const btnStartAR = document.getElementById('btn-start-ar');
+        const btnStartMouse = document.getElementById('btn-start-mouse');
+        const btnStartAI = document.getElementById('btn-start-ai');
+        const aiThemeInput = document.getElementById('ai-theme-input');
+        const arProgressBar = document.getElementById('ar-progress-bar');
+        const arProgressText = document.getElementById('ar-progress-text');
+        const loadingTitle = document.getElementById('loading-title');
+        const loadingDescription = document.getElementById('loading-description');
+
+        // Play Screen Elements
+        const currentQuestionNum = document.getElementById('current-question-num');
+        const questionProgressBar = document.getElementById('question-progress-bar');
+        const liveScore = document.getElementById('live-score');
+        const timerSec = document.getElementById('timer-sec');
+        const questionText = document.getElementById('question-text');
+        const answerButtons = document.querySelectorAll('.ans-btn');
+        const questionBadge = document.getElementById('question-badge');
+        
+        // AI Hint Elements
+        const btnAIHint = document.getElementById('btn-ai-hint');
+        const aiHintBubble = document.getElementById('ai-hint-bubble');
+        const aiHintText = document.getElementById('ai-hint-text');
+        const btnCloseHint = document.getElementById('btn-close-hint');
+
+        // Result Elements
+        const resultCorrectCount = document.getElementById('result-correct-count');
+        const resultFinalScore = document.getElementById('result-final-score');
+        const resultRank = document.getElementById('result-rank');
+        const resultFeedback = document.getElementById('result-feedback');
+        const btnReplay = document.getElementById('btn-replay');
+        const btnShare = document.getElementById('btn-share');
+
+        // --- CHANGE SCREENS ---
+        function showScreen(screenKey) {
+            currentScreen = screenKey;
+            Object.keys(screens).forEach(key => {
+                if (key === screenKey) {
+                    screens[key].classList.remove('hidden');
+                } else {
+                    screens[key].classList.add('hidden');
+                }
+            });
+
+            // Adjust Hand pointer visibility
+            if (screenKey === 'playing' && controlMode === 'ar') {
+                handPointer.classList.remove('hidden');
+            } else {
+                handPointer.classList.add('hidden');
+            }
+        }
+
+        // --- GAMEPLAY LOGIC ---
+        function initNewGame() {
+            if (!isAIGeneratedMode) {
+                // Pick 5 random questions from 50 default questions
+                const shuffled = [...questionBank].sort(() => 0.5 - Math.random());
+                activeQuestions = shuffled.slice(0, 5);
+                questionBadge.textContent = "Translate this Family bond!";
+            } else {
+                questionBadge.textContent = `AI Dynamic Quiz: ${currentAITopic}`;
+            }
+            
+            currentQuestionIndex = 0;
+            score = 0;
+            correctAnswersCount = 0;
+            liveScore.textContent = "0";
+            
+            aiHintBubble.classList.add('hidden');
+            showScreen('playing');
+            loadQuestion();
+        }
+
+        function loadQuestion() {
+            hasAnswered = false;
+            aiHintBubble.classList.add('hidden');
+            const qData = activeQuestions[currentQuestionIndex];
+            
+            // UI update
+            currentQuestionNum.textContent = currentQuestionIndex + 1;
+            questionProgressBar.style.width = `${((currentQuestionIndex + 1) / 5) * 100}%`;
+            
+            questionText.textContent = qData.q;
+            
+            // Render answers with default clean state
+            answerButtons.forEach((btn, idx) => {
+                btn.classList.remove('neon-border-green', 'neon-border-red', 'opacity-50', 'neon-glow-cyan');
+                btn.classList.add('border-slate-700/50');
+                btn.style.transform = '';
+                btn.disabled = false;
+                
+                const optionCircle = btn.querySelector('.ans-circle');
+                optionCircle.className = "ans-circle flex-shrink-0 w-9 h-9 rounded-xl bg-slate-800 border border-slate-700 text-slate-300 font-bold text-base flex items-center justify-center group-hover:bg-cyan-500 group-hover:text-white transition-colors duration-200";
+                
+                const valEl = btn.querySelector('.ans-val');
+                valEl.textContent = qData.a[idx] || "";
+                
+                const checkmark = btn.querySelector('.ans-checkmark');
+                checkmark.className = "ans-checkmark opacity-0 text-emerald-400 text-2xl absolute right-5";
+                checkmark.innerHTML = `<i class="fa-regular fa-circle-check"></i>`;
+            });
+
+            // Reset timer
+            timer = 30;
+            timerSec.textContent = timer;
+            clearInterval(timerInterval);
+            timerInterval = setInterval(() => {
+                timer--;
+                timerSec.textContent = timer;
+                if (timer <= 5 && timer > 0) {
+                    playSynthSound('tick');
+                    timerSec.classList.add('text-rose-500', 'animate-ping');
+                    setTimeout(() => timerSec.classList.remove('animate-ping'), 500);
+                } else {
+                    timerSec.classList.remove('text-rose-500');
+                }
+
+                if (timer <= 0) {
+                    clearInterval(timerInterval);
+                    handleAnswer(-1); // Timeout
+                }
+            }, 1000);
+        }
+
+        function handleAnswer(selectedIndex) {
+            if (hasAnswered) return;
+            hasAnswered = true;
+            clearInterval(timerInterval);
+
+            const qData = activeQuestions[currentQuestionIndex];
+            const correctIndex = qData.c;
+
+            // Highlight answers
+            answerButtons.forEach((btn, idx) => {
+                btn.disabled = true;
+                const optionCircle = btn.querySelector('.ans-circle');
+                const checkmark = btn.querySelector('.ans-checkmark');
+
+                if (idx === correctIndex) {
+                    btn.classList.add('neon-border-green');
+                    btn.classList.remove('border-slate-700/50');
+                    optionCircle.className = "ans-circle flex-shrink-0 w-9 h-9 rounded-xl bg-emerald-500 text-white font-bold text-base flex items-center justify-center";
+                    checkmark.className = "ans-checkmark opacity-100 text-emerald-400 text-2xl absolute right-5";
+                    checkmark.innerHTML = `<i class="fa-solid fa-circle-check"></i>`;
+                } else if (idx === selectedIndex) {
+                    btn.classList.add('neon-border-red');
+                    btn.classList.remove('border-slate-700/50');
+                    optionCircle.className = "ans-circle flex-shrink-0 w-9 h-9 rounded-xl bg-rose-500 text-white font-bold text-base flex items-center justify-center";
+                    checkmark.className = "ans-checkmark opacity-100 text-rose-400 text-2xl absolute right-5";
+                    checkmark.innerHTML = `<i class="fa-solid fa-circle-xmark"></i>`;
+                } else {
+                    btn.classList.add('opacity-50');
+                }
+            });
+
+            if (selectedIndex === correctIndex) {
+                playSynthSound('correct');
+                const earnedPoints = 100 + (timer * 5);
+                score += earnedPoints;
+                correctAnswersCount++;
+                liveScore.textContent = score;
+                confetti({
+                    particleCount: 50,
+                    spread: 60,
+                    origin: { y: 0.8 }
+                });
+            } else {
+                playSynthSound('wrong');
+            }
+
+            // Proceed to next question after delay
+            setTimeout(() => {
+                currentQuestionIndex++;
+                if (currentQuestionIndex < 5) {
+                    loadQuestion();
+                } else {
+                    showResults();
+                }
+            }, 2500);
+        }
+
+        // --- GEMINI AI FEATURES ---
+
+        // Feature 1: Dynamic AI Theme Quiz Generator
+        async function generateAICustomQuiz(topic) {
+            isAIGeneratedMode = true;
+            currentAITopic = topic;
+
+            loadingTitle.textContent = "✨ กำลังปรุงควิซพิเศษด้วย AI";
+            loadingDescription.innerHTML = `Gemini กำลังสร้างแบบทดสอบเกี่ยวกับ <span class="text-cyan-400 font-bold">"${topic}"</span> แบบปรนัยภาษาอังกฤษ 5 ข้อที่มีคุณภาพสูงพร้อมเฉลย...`;
+            showScreen('loading');
+            
+            arProgressBar.style.width = "20%";
+            arProgressText.textContent = "เชื่อมโยงความรู้ความสัมพันธ์ครอบครัว...";
+
+            const systemPrompt = `You are an expert English teacher specializing in family relationship terms. You must generate exactly 5 multiple choice questions in English about family relationships based on the user's custom topic. The output must be valid JSON matching the exact schema specified. Provide diverse difficulty levels. Ensure one option is exactly correct. Keep questions clear and interesting.`;
+            const userPrompt = `Create 5 family relationship questions about the topic: "${topic}". Make it match the requested theme context. The family relationship aspect must still be the core challenge of the questions.`;
+
+            const payload = {
+                contents: [{ parts: [{ text: userPrompt }] }],
+                systemInstruction: { parts: [{ text: systemPrompt }] },
+                generationConfig: {
+                    responseMimeType: "application/json",
+                    responseSchema: {
+                        type: "OBJECT",
+                        properties: {
+                            questions: {
+                                type: "ARRAY",
+                                items: {
+                                    type: "OBJECT",
+                                    properties: {
+                                        q: { type: "STRING", description: "The family relationship question in English." },
+                                        a: {
+                                            type: "ARRAY",
+                                            items: { type: "STRING" },
+                                            description: "4 multiple choice options. Exactly four elements."
+                                        },
+                                        c: { type: "INTEGER", description: "Correct answer index (0 to 3)." }
+                                    },
+                                    required: ["q", "a", "c"]
+                                }
+                            }
+                        },
+                        required: ["questions"]
+                    }
+                }
+            };
+
+            try {
+                arProgressBar.style.width = "50%";
+                arProgressText.textContent = "กำลังสร้างสรรค์คำถามและตัวเลือกปรนัย...";
+                
+                const responseData = await fetchGeminiAPI(payload);
+                arProgressBar.style.width = "85%";
+                arProgressText.textContent = "เรียงลำดับความท้าทายด้วย AI...";
+
+                const generatedData = JSON.parse(responseData.candidates[0].content.parts[0].text);
+                
+                if (generatedData && generatedData.questions && generatedData.questions.length === 5) {
+                    activeQuestions = generatedData.questions;
+                    arProgressBar.style.width = "100%";
+                    arProgressText.textContent = "เสร็จสมบูรณ์!";
+                    
+                    // Start camera/AR after data loaded
+                    setTimeout(() => {
+                        startCameraAndDetection(false);
+                    }, 800);
+                } else {
+                    throw new Error("Invalid output format from AI.");
+                }
+            } catch (error) {
+                console.error("AI Generation Error", error);
+                showNotification("ไม่สามารถสร้างแบบควิซพิเศษด้วย AI ได้ในขณะนี้ ระบบจะใช้ควิซความสัมพันธ์ดั้งเดิมทดแทน");
+                isAIGeneratedMode = false;
+                startCameraAndDetection(false);
+            }
+        }
+
+        // Feature 2: Dynamic AI Hints
+        async function fetchAIHint() {
+            if (hasAnswered) return;
+            
+            aiHintBubble.classList.remove('hidden');
+            aiHintText.innerHTML = `<i class="fa-solid fa-spinner animate-spin text-amber-500 mr-2"></i>ระบบกำลังสร้างคำใบ้อย่างชาญฉลาด...`;
+            
+            const currentQuestion = activeQuestions[currentQuestionIndex];
+            const systemPrompt = `You are a friendly AI family quiz coach. Your job is to give a clever riddle-like hint or conceptual explanation for the English family relationship question provided. DO NOT give away the direct answer or list the correct option directly. Keep it brief, extremely encouraging, and friendly. Provide a 1-sentence tip in English, followed by a brief 1-sentence Thai summary/hint in parentheses. Keep the total output under 3 lines.`;
+            const userPrompt = `Give a hint for this question: "${currentQuestion.q}" where the choices are [${currentQuestion.a.join(', ')}].`;
+
+            const payload = {
+                contents: [{ parts: [{ text: userPrompt }] }],
+                systemInstruction: { parts: [{ text: systemPrompt }] }
+            };
+
+            try {
+                const responseData = await fetchGeminiAPI(payload);
+                const hint = responseData.candidates[0].content.parts[0].text;
+                aiHintText.textContent = hint;
+            } catch (error) {
+                aiHintText.textContent = "ลองนึกถึงลำดับรุ่นและสายเลือดความสัมพันธ์ดูสิ! (เฉลยมีเพียงหนึ่งเดียว คุณทำได้แน่นอน!)";
+            }
+        }
+
+        // --- HINT BUTTON ACTIONS ---
+        btnAIHint.addEventListener('click', () => {
+            playSynthSound('click');
+            fetchAIHint();
+        });
+
+        btnCloseHint.addEventListener('click', () => {
+            playSynthSound('click');
+            aiHintBubble.classList.add('hidden');
+        });
+
+        // --- MOUSE CLICK COMPATIBILITY ---
+        answerButtons.forEach((btn) => {
+            btn.addEventListener('click', () => {
+                if (hasAnswered) return;
+                const index = parseInt(btn.getAttribute('data-index'));
+                playSynthSound('click');
+                handleAnswer(index);
+            });
+        });
+
+        btnReplay.addEventListener('click', () => {
+            playSynthSound('click');
+            isAIGeneratedMode = false;
+            initNewGame();
+        });
+
+        btnShare.addEventListener('click', () => {
+            playSynthSound('click');
+            const shareText = `ฉันได้คะแนน ${score} คะแนนจากควิซความสัมพันธ์ครอบครัว AR AI! มาประลองทักษะตรวจจับมือกันเถอะ!`;
+            
+            const el = document.createElement('textarea');
+            el.value = shareText;
+            document.body.appendChild(el);
+            el.select();
+            document.execCommand('copy');
+            document.body.removeChild(el);
+
+            btnShare.innerHTML = `<i class="fa-solid fa-check"></i> คัดลอกสำเร็จ!`;
+            setTimeout(() => {
+                btnShare.innerHTML = `<i class="fa-solid fa-copy"></i> คัดลอกลิ้งค์`;
+            }, 2000);
+        });
+
+        // Toggle Control mode
+        toggleControlBtn.addEventListener('click', () => {
+            playSynthSound('click');
+            if (controlMode === 'ar') {
+                setControlMode('mouse');
+            } else {
+                setControlMode('ar');
+            }
+        });
+
+        function setControlMode(mode) {
+            controlMode = mode;
+            if (mode === 'ar') {
+                controlModeBadge.innerHTML = `<i class="fa-solid fa-hand-pointer mr-1"></i> Mode: Hand AR`;
+                toggleControlBtn.textContent = "Switch to Mouse";
+                if (currentScreen === 'playing') {
+                    handPointer.classList.remove('hidden');
+                }
+            } else {
+                controlModeBadge.innerHTML = `<i class="fa-solid fa-mouse mr-1"></i> Mode: Mouse`;
+                toggleControlBtn.textContent = "Switch to Hand AR";
+                handPointer.classList.add('hidden');
+            }
+        }
+
+        // START BUTTON HANDLERS
+        btnStartMouse.addEventListener('click', () => {
+            playSynthSound('click');
+            setControlMode('mouse');
+            isAIGeneratedMode = false;
+            initNewGame();
+            startCameraAndDetection(true);
+        });
+
+        btnStartAR.addEventListener('click', () => {
+            playSynthSound('click');
+            setControlMode('ar');
+            isAIGeneratedMode = false;
+            showScreen('loading');
+            startCameraAndDetection(false);
+        });
+
+        btnStartAI.addEventListener('click', () => {
+            const topic = aiThemeInput.value.trim();
+            if (!topic) {
+                showNotification("กรุณากรอกธีมความต้องการของคุณก่อน เช่น 'ราชวงศ์อังกฤษ' เพื่อสร้างคำถาม!");
+                return;
+            }
+            playSynthSound('click');
+            setControlMode('ar');
+            generateAICustomQuiz(topic);
+        });
+
+
+        // --- MULTIPLAYER/CAMERA & MEDIAPIPE AI ---
+        function startCameraAndDetection(silentMode = false) {
+            if (isModelLoaded) {
+                if (!silentMode) initNewGame();
+                return;
+            }
+
+            loadingTitle.textContent = "กำลังเชื่อมต่อระบบกล้อง";
+            loadingDescription.textContent = "โปรดให้สิทธิ์ใช้งานกล้องหากมีป๊อปอัปแจ้งเตือนระบบกำลังโหลดโมเดล AI สำหรับตรวจจับมืออัจฉริยะ...";
+
+            let progress = 10;
+            const progressInterval = setInterval(() => {
+                if (progress < 85) {
+                    progress += Math.floor(Math.random() * 15) + 5;
+                    if (progress > 85) progress = 85;
+                    arProgressBar.style.width = `${progress}%`;
+                    arProgressText.textContent = `กำลังเตรียมส่วนประกอบโครงสร้างมือ AI... (${progress}%)`;
+                }
+            }, 250);
+
+            // Initialize MediaPipe Hands
+            hands = new Hands({
+                locateFile: (file) => {
+                    return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
+                }
+            });
+
+            hands.setOptions({
+                maxNumHands: 1,
+                modelComplexity: 1,
+                minDetectionConfidence: 0.6,
+                minTrackingConfidence: 0.6
+            });
+
+            hands.onResults(onHandResults);
+
+            // Access user Web Camera
+            navigator.mediaDevices.getUserMedia({
+                video: { width: 640, height: 480, facingMode: "user" },
+                audio: false
+            }).then(stream => {
+                videoElement.srcObject = stream;
+                
+                videoElement.onloadedmetadata = () => {
+                    canvasElement.width = videoElement.videoWidth;
+                    canvasElement.height = videoElement.videoHeight;
+                    
+                    camera = new Camera(videoElement, {
+                        onFrame: async () => {
+                            await hands.send({ image: videoElement });
+                        },
+                        width: 640,
+                        height: 480
+                    });
+                    
+                    camera.start().then(() => {
+                        clearInterval(progressInterval);
+                        arProgressBar.style.width = "100%";
+                        arProgressText.textContent = "เชื่อมต่อระบบกล้องสำเร็จ! (100%)";
+                        
+                        isModelLoaded = true;
+                        trackerStatusDot.className = "w-3.5 h-3.5 rounded-full bg-emerald-500 shadow-lg shadow-emerald-500/50";
+                        trackerStatusText.textContent = "ระบบ AR มือกล้องพร้อมใช้งาน";
+                        
+                        setTimeout(() => {
+                            if (!silentMode && (currentScreen === 'loading')) {
+                                initNewGame();
+                            }
+                        }, 800);
+                    }).catch(err => {
+                        console.error("Camera start failed", err);
+                        handleCameraFailure(progressInterval);
+                    });
+                };
+            }).catch(err => {
+                console.error("Webcam access rejected", err);
+                handleCameraFailure(progressInterval);
+            });
+        }
+
+        function handleCameraFailure(intervalId) {
+            clearInterval(intervalId);
+            trackerStatusDot.className = "w-3.5 h-3.5 rounded-full bg-rose-500 shadow-lg";
+            trackerStatusText.textContent = "กล้องขัดข้อง - ใช้โหมดเมาส์แทน";
+            setControlMode('mouse');
+            if (currentScreen === 'loading') {
+                initNewGame();
+            }
+        }
+
+        // --- HAND DETECTION ON RESULTS (AI Loop) ---
+        function onHandResults(results) {
+            canvasCtx.save();
+            canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+            
+            let detectedHand = false;
+
+            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                detectedHand = true;
+                const landmarks = results.multiHandLandmarks[0];
+                
+                // Use Index Finger Tip (landmark index 8) as pointer coordinates
+                const indexFingerTip = landmarks[8];
+                
+                // Normalize and mirror X because camera feed is mirrored
+                const rawX = (1.0 - indexFingerTip.x) * window.innerWidth;
+                const rawY = indexFingerTip.y * window.innerHeight;
+
+                // Smooth out pointer coordinates
+                cursorX = cursorX + (rawX - cursorX) * smoothingFactor;
+                cursorY = cursorY + (rawY - cursorY) * smoothingFactor;
+
+                // Move visual hand cursor pointer
+                if (controlMode === 'ar' && currentScreen === 'playing') {
+                    handPointer.style.left = `${cursorX - 16}px`;
+                    handPointer.style.top = `${cursorY - 16}px`;
+                    handPointer.classList.remove('hidden');
+                }
+
+                // Check collisions with Answer Buttons or AI Hint
+                if (controlMode === 'ar' && currentScreen === 'playing') {
+                    checkPointerCollisions(cursorX, cursorY);
+                }
+
+                // Draw futuristic glowing lines on hand landmarks for styling
+                drawHandOutline(landmarks);
+            } else {
+                if (hoveredElement) {
+                    resetHoverTracker();
+                }
+                if (controlMode === 'ar') {
+                    handPointer.classList.add('hidden');
+                }
+            }
+            
+            canvasCtx.restore();
+        }
+
+        // Draw modern holographic lines on fingers
+        function drawHandOutline(landmarks) {
+            canvasCtx.strokeStyle = 'rgba(6, 182, 212, 0.7)'; // Cyan-400
+            canvasCtx.lineWidth = 4;
+            canvasCtx.shadowColor = 'rgba(6, 182, 212, 0.9)';
+            canvasCtx.shadowBlur = 10;
+            
+            // Draw tracking points on fingertips
+            const fingerTips = [4, 8, 12, 16, 20];
+            fingerTips.forEach(ptIndex => {
+                const pt = landmarks[ptIndex];
+                const px = pt.x * canvasElement.width;
+                const py = pt.y * canvasElement.height;
+                
+                canvasCtx.beginPath();
+                canvasCtx.arc(px, py, 6, 0, 2 * Math.PI);
+                canvasCtx.fillStyle = ptIndex === 8 ? '#f43f5e' : '#22d3ee'; // red pointer tip, others cyan
+                canvasCtx.fill();
+            });
+
+            // Standard palm connections mapping
+            const connections = [
+                [0, 1], [1, 2], [2, 3], [3, 4], // Thumb
+                [0, 5], [5, 6], [6, 7], [7, 8], // Index
+                [9, 10], [10, 11], [11, 12],     // Middle
+                [13, 14], [14, 15], [15, 16],    // Ring
+                [0, 17], [17, 18], [18, 19], [19, 20], // Pinky
+                [5, 9], [9, 13], [13, 17] // Palm width
+            ];
+
+            connections.forEach(([start, end]) => {
+                const ptStart = landmarks[start];
+                const ptEnd = landmarks[end];
+                canvasCtx.beginPath();
+                canvasCtx.moveTo(ptStart.x * canvasElement.width, ptStart.y * canvasElement.height);
+                canvasCtx.lineTo(ptEnd.x * canvasElement.width, ptEnd.y * canvasElement.height);
+                canvasCtx.stroke();
+            });
+        }
+
+        // Collision detection for Hover click
+        function checkPointerCollisions(cx, cy) {
+            let foundCollision = false;
+
+            // Target elements to track collision
+            const targets = [...answerButtons];
+            if (!hasAnswered) {
+                targets.push(btnAIHint);
+            }
+
+            targets.forEach(element => {
+                if (element.disabled) return;
+                
+                const rect = element.getBoundingClientRect();
+                
+                // If within boundaries
+                if (cx >= rect.left && cx <= rect.right && cy >= rect.top && cy <= rect.bottom) {
+                    foundCollision = true;
+                    
+                    if (hoveredElement !== element) {
+                        resetHoverTracker();
+                        hoveredElement = element;
+                        hoverStartTime = Date.now();
+                        playSynthSound('hover');
+                        
+                        element.style.transform = 'scale(1.025)';
+                        if (element === btnAIHint) {
+                            element.classList.add('neon-glow-amber');
+                        } else {
+                            element.classList.add('neon-glow-cyan');
+                        }
+                    } else {
+                        const elapsedTime = Date.now() - hoverStartTime;
+                        const progressPercent = Math.min((elapsedTime / requiredHoverTime) * 100, 100);
+                        
+                        pointerProgressPath.setAttribute('stroke-dasharray', `${progressPercent}, 100`);
+
+                        if (elapsedTime >= requiredHoverTime) {
+                            resetHoverTracker();
+                            element.click();
+                        }
+                    }
+                }
+            });
+
+            if (!foundCollision && hoveredElement) {
+                resetHoverTracker();
+            }
+        }
+
+        function resetHoverTracker() {
+            if (hoveredElement) {
+                hoveredElement.style.transform = '';
+                hoveredElement.classList.remove('neon-glow-cyan', 'neon-glow-amber');
+            }
+            hoveredElement = null;
+            hoverStartTime = null;
+            pointerProgressPath.setAttribute('stroke-dasharray', `0, 100`);
+        }
+    </script>
+</body>
+</html>
