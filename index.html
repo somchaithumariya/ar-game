@@ -472,11 +472,14 @@
                         body: JSON.stringify(payload)
                     });
 
-                    if (response.ok) {
-                        return await response.json();
+                    if (!response.ok) {
+                        const errorText = await response.text();
+                        console.error(`Gemini API Error (Attempt ${attempt + 1}):`, response.status, errorText);
+                        throw new Error(`API Error: ${response.status}`);
                     }
+                    return await response.json();
                 } catch (e) {
-                    // Fail silently for exponential retries
+                    console.warn(`Fetch Gemini API failed on attempt ${attempt + 1}:`, e);
                 }
                 
                 attempt++;
@@ -496,7 +499,7 @@
             toast.classList.remove('hidden');
             setTimeout(() => {
                 toast.classList.add('hidden');
-            }, 4500);
+            }, 5500);
         }
 
         // --- APP STATE ---
@@ -621,6 +624,14 @@
         function loadQuestion() {
             hasAnswered = false;
             aiHintBubble.classList.add('hidden');
+            
+            if (!activeQuestions || activeQuestions.length === 0) {
+                showNotification("ระบบคำถามเกิดข้อผิดพลาด กำลังกลับสู่คำถามดั้งเดิม...");
+                isAIGeneratedMode = false;
+                initNewGame();
+                return;
+            }
+
             const qData = activeQuestions[currentQuestionIndex];
             
             // UI update
@@ -718,7 +729,7 @@
             // Proceed to next question after delay
             setTimeout(() => {
                 currentQuestionIndex++;
-                if (currentQuestionIndex < 5) {
+                if (currentQuestionIndex < 5 && currentQuestionIndex < activeQuestions.length) {
                     loadQuestion();
                 } else {
                     showResults();
@@ -740,11 +751,11 @@
             arProgressBar.style.width = "20%";
             arProgressText.textContent = "เชื่อมโยงความรู้ความสัมพันธ์ครอบครัว...";
 
-            const systemPrompt = `You are an expert English teacher specializing in family relationship terms. You must generate exactly 5 multiple choice questions in English about family relationships based on the user's custom topic. The output must be valid JSON matching the exact schema specified. Provide diverse difficulty levels. Ensure one option is exactly correct. Keep questions clear and interesting.`;
+            const systemPrompt = `You are an expert English teacher specializing in family relationship terms. Generate exactly 5 multiple choice questions in English about family relationships based on the user's custom topic. Output ONLY valid JSON matching the exact schema specified, without any markdown formatting like \`\`\`json or extra text. Each question MUST have exactly 4 choices.`;
             const userPrompt = `Create 5 family relationship questions about the topic: "${topic}". Make it match the requested theme context. The family relationship aspect must still be the core challenge of the questions.`;
 
             const payload = {
-                contents: [{ parts: [{ text: userPrompt }] }],
+                contents: [{ role: "user", parts: [{ text: userPrompt }] }],
                 systemInstruction: { parts: [{ text: systemPrompt }] },
                 generationConfig: {
                     responseMimeType: "application/json",
@@ -781,22 +792,27 @@
                 arProgressBar.style.width = "85%";
                 arProgressText.textContent = "เรียงลำดับความท้าทายด้วย AI...";
 
-                const generatedData = JSON.parse(responseData.candidates[0].content.parts[0].text);
+                // Robust JSON Parsing logic to handle unexpected wrappers or markdown
+                let rawText = responseData.candidates[0]?.content?.parts[0]?.text;
+                if (!rawText) throw new Error("Empty response from AI");
                 
-                if (generatedData && generatedData.questions && generatedData.questions.length === 5) {
+                rawText = rawText.replace(/```json/gi, '').replace(/```/g, '').trim();
+                const generatedData = JSON.parse(rawText);
+                
+                if (generatedData && generatedData.questions && generatedData.questions.length > 0) {
                     activeQuestions = generatedData.questions;
                     arProgressBar.style.width = "100%";
                     arProgressText.textContent = "เสร็จสมบูรณ์!";
                     
-                    // Start camera/AR after data loaded
+                    // Start camera/AR after data is verified and loaded
                     setTimeout(() => {
                         startCameraAndDetection(false);
                     }, 800);
                 } else {
-                    throw new Error("Invalid output format from AI.");
+                    throw new Error("Invalid output JSON structure from AI.");
                 }
             } catch (error) {
-                console.error("AI Generation Error", error);
+                console.error("AI Generation Parsing Error:", error);
                 showNotification("ไม่สามารถสร้างแบบควิซพิเศษด้วย AI ได้ในขณะนี้ ระบบจะใช้ควิซความสัมพันธ์ดั้งเดิมทดแทน");
                 isAIGeneratedMode = false;
                 startCameraAndDetection(false);
@@ -815,15 +831,17 @@
             const userPrompt = `Give a hint for this question: "${currentQuestion.q}" where the choices are [${currentQuestion.a.join(', ')}].`;
 
             const payload = {
-                contents: [{ parts: [{ text: userPrompt }] }],
+                contents: [{ role: "user", parts: [{ text: userPrompt }] }],
                 systemInstruction: { parts: [{ text: systemPrompt }] }
             };
 
             try {
                 const responseData = await fetchGeminiAPI(payload);
-                const hint = responseData.candidates[0].content.parts[0].text;
+                const hint = responseData.candidates[0]?.content?.parts[0]?.text;
+                if (!hint) throw new Error("Empty hint response");
                 aiHintText.textContent = hint;
             } catch (error) {
+                console.error("AI Hint Generation Error:", error);
                 aiHintText.textContent = "ลองนึกถึงลำดับรุ่นและสายเลือดความสัมพันธ์ดูสิ! (เฉลยมีเพียงหนึ่งเดียว คุณทำได้แน่นอน!)";
             }
         }
@@ -851,7 +869,7 @@
 
         btnReplay.addEventListener('click', () => {
             playSynthSound('click');
-            isAIGeneratedMode = false;
+            isAIGeneratedMode = false; // reset back to normal mode on replay if preferred
             initNewGame();
         });
 
@@ -929,6 +947,7 @@
         // --- MULTIPLAYER/CAMERA & MEDIAPIPE AI ---
         function startCameraAndDetection(silentMode = false) {
             if (isModelLoaded) {
+                // If model is already loaded and we just generated a quiz or started
                 if (!silentMode) initNewGame();
                 return;
             }
